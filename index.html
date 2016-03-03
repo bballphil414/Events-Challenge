@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html ng-app="VSEventsChallenge" manifest="manifest.appcache">
+  </html>
+  <head lang="en">
+    <meta charset="utf-8">
+    <title>VS Events Challenge - Phil Wise</title>
+    
+     <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+    <style type="text/css">
+     /** Boostrap style fix **/
+    .nav, .pagination, .carousel, .panel-title a { cursor: pointer; }
+      a { cursor: pointer }
+    </style>
+    
+    <!-- Angular 1.5 -->
+    <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.5.0/angular.js"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.5.0/angular-animate.js"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.5.0/angular-cookies.js"></script>
+    <script src="//angular-ui.github.io/bootstrap/ui-bootstrap-tpls-1.2.1.js"></script>
+    <!-- jQuery library -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script>
+    <!-- Latest compiled JavaScript -->
+    <script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+    <!-- VividSeats API -->
+    <script src="js/event-service.js"></script>
+    
+    
+    
+    <!-- Implementation of VS Event Service -->
+    <script type="text/javascript">
+    
+    var app = angular.module('VSEventsChallenge', ['ui.bootstrap', 'ngCookies']);
+      
+    app.controller('EventsListController', function($scope, $window, $uibModal, $log) {
+      
+      var service = VividSeats.eventService;
+      
+      // Set up the events.  This will re-occur every time someone edits or removes a person.
+      service.all(getEvents, reportError);
+      $scope.getEvents = function(_events) {
+        $scope.$apply(function (events) {
+          $scope.events = _events;
+          $scope.clearError();
+          $scope.setCities();
+          // We move back to the main tab right now because tabs can be removed if a person is deleted.
+          // If they are edited, we still move back to refresh the list, for now.
+          $('.nav-tabs a[href="#all_events"]').tab('show');
+        });
+      }
+      
+      // Set up the cities for grouping
+      $scope.cities = [];
+      $scope.setCities = function() {
+        $scope.cities = [];
+        var count = 0;
+        angular.forEach($scope.events, function(value, key) {
+          var index = $scope.getCityIndex(value.venue.city);
+          if(index == -1) {
+            var eventsArray = [];
+            var city = { key: count, name: value.venue.city, events: eventsArray };
+            $scope.cities.push(city);
+            $scope.cities[count].events.push(value);
+            count++;
+          } else {
+            $scope.cities[index].events.push(value);
+          }
+        });
+      }
+      
+      // Get the index of the city in the city array, for distinct
+      $scope.getCityIndex = function(cityName) {
+        $scope.index = -1;
+        index = angular.forEach($scope.cities, function(value, key) {
+          if(cityName == value.name) {
+            $scope.index = key;
+          }
+        });
+        return $scope.index;
+      }
+      
+      $scope.animationsEnabled = true;
+      
+      // Editing event or adding an event function
+      $scope.editEvent = function(event) {
+
+        if(event == null) {
+          event = { 
+            "id" : 0,
+            "new": true,
+            "name" : "New Event",
+            "date" : "",
+            "venue" : {
+              "id" : 0,
+              "name" : "",
+              "city" : "",
+              "state" : ""
+            }
+          };
+        }
+        $scope.event = event;
+        
+       // Pop up a modal and let the user edit event info
+        var eventsModal = $uibModal.open({
+          animation: $scope.animationsEnabled,
+          templateUrl: 'editEvent.html',
+          controller: 'EventsModalController',
+          size: 'lg',
+          resolve: {
+            event: function () {
+              return $scope.event;
+            }
+          }
+        });
+        
+        // Dismiss modal, or return result
+        eventsModal.result.then(function (event) {
+          if(!event.new) {
+            service.update(event, function() { service.all(getEvents, reportError) }, reportError);
+          } else {
+            event.new = false;
+            service.add(event, function() { service.all(getEvents, reportError) }, reportError);
+          }
+        }, function () {
+          $log.info('Modal dismissed at: ' + new Date());
+        });
+      }
+      
+      // Remove an event
+      $scope.removeEvent = function(event) {
+        var r = confirm("Are you sure you want to delete this event?");
+        if (r == true) {
+           service.remove(event, function() { service.all(getEvents, reportError) }, reportError);
+        }
+      }
+      
+      // Report an error
+      $scope.reportError = function(_error) {
+        $('#error').css('display','block');
+        $scope.$apply(function (events) {
+          $scope.error = _error;
+        });
+      }
+      
+      // Clear out errors
+      $scope.clearError = function() {
+        $('#error').css('display','none');
+      }
+      
+    });
+
+    // Modal controller
+    app.controller('EventsModalController', function ($scope, $uibModalInstance, event) {
+
+      $scope.event = event;
+      
+      $scope.ok = function () {
+        $uibModalInstance.close($scope.event);
+      };
+
+      $scope.cancel = function () {
+        $uibModalInstance.dismiss('cancel');
+      };
+    });
+      
+    </script>
+    
+    <script type="text/ng-template" id="editEvent.html">
+        <div class="modal-header">
+            <h3 class="modal-title">Event: {{event.name}}</h3>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+              <label>Name:</label>
+              <input type="text" ng-model="event.name" class="form-control">
+              <label>Date:</label>
+              <input type="text" ng-model="event.date" class="form-control">
+              <label>Venue Name:</label>
+              <input type="text" ng-model="event.venue.name" class="form-control">
+              <label>Venue City:</label>
+              <input type="text" ng-model="event.venue.city" class="form-control">
+              <label>Venue State:</label>
+              <input type="text" ng-model="event.venue.state" class="form-control">
+            </div> 
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary" type="button" ng-click="ok()">Save Event</button>
+            <button class="btn btn-warning" type="button" ng-click="cancel()">Cancel</button>
+        </div>
+    </script>
+  </head>
+  
+  <body>
+    <div id="eventsListController" class="container" ng-controller="EventsListController">
+      <h1>VS Events Challenge - Phil Wise</h1>
+    
+      <ul class="nav nav-tabs">
+        <li class="active"><a data-toggle="tab" href="#all_events">All Events</a></li>
+        
+        <li ng-repeat="city in cities"><a data-toggle="tab" href="#events_{{city.key}}">{{city.name}} Events</a></li>
+      </ul>
+
+      <div class="tab-content">
+
+        <div id="all_events" class="tab-pane fade in active">
+          <table id="all_events_table" class="table table-striped">
+            <tr>
+              <th>Event Name</th>
+              <th>Date</th>
+              <th>Venue</th>
+              <th>City</th>
+              <th>State</th>
+              <th>Action</th>
+            </tr>
+            
+            <tr ng-repeat="event in events">
+              <td>{{event.name}}</td>
+              <td>{{event.date}}</td>
+              <td>{{event.venue.name}}</td>
+              <td>{{event.venue.city}}</td>
+              <td>{{event.venue.state}}</td>
+              <td><a ng-click="removeEvent(event)">Remove</a> / <a ng-click="editEvent(event)">Edit</a></td>
+            </tr>
+            
+          </table>         
+        </div>
+        
+        <div id="events_{{city.key}}" class="tab-pane fade" ng-repeat="city in cities">
+          <table id="events_table" class="table table-striped">
+            <tr>
+              <th>Event Name</th>
+              <th>Date</th>
+              <th>Venue</th>
+              <th>City</th>
+              <th>State</th>
+              <th>Action</th>
+            </tr>
+            
+            <tr ng-repeat="cevent in city.events">
+              <td>{{cevent.name}}</td>
+              <td>{{cevent.date}}</td>
+              <td>{{cevent.venue.name}}</td>
+              <td>{{cevent.venue.city}}</td>
+              <td>{{cevent.venue.state}}</td>
+              <td><a ng-click="removeEvent(cevent)">Remove</a> / <a ng-click="editEvent(cevent)">Edit</a></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+      
+      <a class="btn btn-primary btn-lg" ng-click="editEvent(null)">Add Event</a>
+      <br />
+      <br />
+      <div id="error" class="alert alert-danger" style="display: none">
+        <strong>Error!</strong> 
+        {{error}}
+      </div>
+    </div>
+  </body>
+  
+  <script type="text/javascript">
+  /* 
+     This code is necessary to port from the API to Angular.  
+     Since we're calling a REST call that has a callback, it can't directly call Angular.
+     We'll just grab the scope, and set it once the page loads and call the functions from here.
+  */
+  var outsideApp = "";
+  window.onload = function() {
+    outsideApp = angular.element(document.getElementById('eventsListController')).scope();
+  }
+  function getEvents(_events) {
+    outsideApp.getEvents(_events);
+    $('#all_events').tab('show');
+  }
+  function success() {
+    console.log("Successfully completed a function");
+  }
+  function reportError(_error) {
+    outsideApp.reportError(_error);
+  }
+  </script>
+
+<script type="text/javascript">
+  /*
+  Utility function to enable back usage of bootstrap tabs
+  */
+  
+  $(document).ready(function() {
+    // add a hash to the URL when the user clicks on a tab
+    $('a[data-toggle="tab"]').on('click', function(e) {
+      history.pushState(null, null, $(this).attr('href'));
+    });
+    // navigate to a tab when the history changes
+    window.addEventListener("popstate", function(e) {
+      var activeTab = $('[href=' + location.hash + ']');
+      if (activeTab.length) {
+        activeTab.tab('show');
+      } else {
+        $('.nav-tabs a:first').tab('show');
+      }
+    });
+  });
+</script>
+</html>
